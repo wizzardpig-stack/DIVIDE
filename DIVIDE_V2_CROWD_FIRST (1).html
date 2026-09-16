@@ -1,0 +1,1551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DIVIDE — the division visualizer</title>
+<style>
+:root{
+  --ink:#08090a;
+  --ink-2:#101214;
+  --bone:#ece7e1;
+  --bone-dim:#9a958f;
+  --bone-faint:#5e5b57;
+  --red:#d6293c;
+  --red-dim:#7d2029;
+  --blue:#6d8aa0;
+  --sand:#a98f62;
+  --rule:#24262a;
+  --rail-w:252px;
+  --stat-w:320px;
+  --font: "Helvetica Neue", Helvetica, "Inter", "Segoe UI", Arial, sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--bone);font-family:var(--font);overflow:hidden}
+body{font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:1px solid var(--red);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ---------- shell ---------- */
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#masthead{flex:0 0 auto;display:flex;align-items:baseline;gap:16px;padding:12px 18px 10px;border-bottom:1px solid var(--rule);position:relative;z-index:40;background:var(--ink)}
+.brand{font-size:16px;font-weight:700;letter-spacing:.34em;line-height:1}
+.brand-sub{margin-left:12px;font-size:9.5px;letter-spacing:.26em;color:var(--bone-faint);font-weight:400}
+.mast-actions{margin-left:auto;display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.act{font-size:10px;letter-spacing:.16em;color:var(--bone-dim);padding:6px 10px;border:1px solid transparent;transition:color .15s,border-color .15s}
+.act:hover{color:var(--bone);border-color:var(--rule)}
+.act[disabled]{color:#3a3c40;cursor:default}
+.act[disabled]:hover{border-color:transparent;color:#3a3c40}
+.act.hot{color:var(--red)}
+.act.hot:hover{border-color:var(--red-dim)}
+
+#stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+#field{position:absolute;inset:0;width:100%;height:100%;display:block}
+#vignette{position:absolute;inset:0;pointer-events:none;
+  background:
+   radial-gradient(115% 80% at 50% 8%, rgba(90,96,110,.10), rgba(0,0,0,0) 62%),
+   radial-gradient(120% 100% at 50% 105%, rgba(0,0,0,.55), rgba(0,0,0,0) 55%),
+   linear-gradient(90deg, rgba(8,9,10,.92) 0, rgba(8,9,10,.55) 15%, rgba(8,9,10,0) 30%),
+   linear-gradient(270deg, rgba(8,9,10,.92) 0, rgba(8,9,10,.5) 17%, rgba(8,9,10,0) 34%);
+}
+
+/* ---------- V2: crowd-first experience ---------- */
+#masthead{background:linear-gradient(to bottom,rgba(8,9,10,.92),rgba(8,9,10,.72));backdrop-filter:blur(7px)}
+#railL{background:linear-gradient(90deg,rgba(8,9,10,.94),rgba(8,9,10,.66) 72%,transparent);transition:opacity .3s ease,transform .3s ease}
+#railR{pointer-events:none}
+#railR .toggle,#railR #methodBtn{pointer-events:auto}
+#railR #count{font-size:clamp(42px,6.4vw,92px);font-weight:540;text-shadow:0 8px 38px rgba(0,0,0,.6)}
+#railR #countCap{color:rgba(236,231,225,.58)}
+#railR #pct{font-size:13px}
+#cam{opacity:.52;transition:opacity .2s}
+#cam:hover{opacity:1}
+#history{background:rgba(8,9,10,.88);backdrop-filter:blur(8px)}
+.step{padding-left:10px;border-left:1px solid #2c2e32}
+.step.cur{border-left-color:var(--red)}
+.step.cut-heavy{border-left-width:3px}
+.layer.extra{display:none}
+body.more-open .layer.extra{display:block}
+#moreDivisions{width:100%;margin:12px 0 4px;padding:9px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);font-size:9.5px;letter-spacing:.18em;color:var(--bone-faint);text-align:left}
+#moreDivisions:hover{color:var(--bone)}
+
+#thesis{position:absolute;z-index:34;left:50%;top:46%;transform:translate(-50%,-50%);text-align:center;width:min(760px,84vw);pointer-events:none;opacity:1;transition:opacity .7s ease,transform .7s ease}
+#thesis.hide{opacity:0;transform:translate(-50%,-46%)}
+#thesis.soft{opacity:.82}
+#thesis .t-big{font-size:clamp(48px,8vw,112px);line-height:.9;font-weight:560;letter-spacing:-.055em}
+#thesis .t-small{margin:18px auto 0;max-width:44ch;font-size:clamp(13px,1.4vw,18px);line-height:1.55;color:var(--bone-dim)}
+#thesis .t-small b{color:var(--bone);font-weight:500}
+#thesis button{pointer-events:auto;margin-top:24px;border-bottom:1px solid var(--red);padding:8px 2px;font-size:10px;letter-spacing:.2em;color:var(--bone)}
+
+#cutEvent{position:absolute;inset:0;z-index:33;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0}
+#cutEvent.show{animation:cutFlash 1.55s cubic-bezier(.2,.7,.2,1)}
+#cutEvent .cut-inner{text-align:center;transform:translateY(-3vh);text-shadow:0 8px 45px #000}
+#cutEvent .cut-layer{font-size:10px;letter-spacing:.28em;color:var(--red);text-transform:uppercase;margin-bottom:12px}
+#cutEvent .cut-flow{display:flex;align-items:center;gap:clamp(12px,2vw,30px);justify-content:center}
+#cutEvent .cut-num{font-size:clamp(34px,6vw,86px);font-weight:560;letter-spacing:-.05em;line-height:.92}
+#cutEvent .cut-from{color:rgba(236,231,225,.34)}
+#cutEvent .cut-arrow{font-size:clamp(18px,2vw,28px);color:var(--red)}
+#cutEvent .cut-pct{margin-top:14px;font-size:12px;letter-spacing:.12em;color:var(--bone-dim)}
+@keyframes cutFlash{0%{opacity:0;transform:scale(.985)}15%{opacity:1;transform:scale(1)}70%{opacity:1}100%{opacity:0;transform:scale(1.015)}}
+
+#reconnectWash{position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 58%,rgba(236,231,225,.12),transparent 58%);mix-blend-mode:screen}
+body.reconnecting #reconnectWash{animation:reconnectPulse 1.1s ease-in-out infinite alternate}
+@keyframes reconnectPulse{from{opacity:.05}to{opacity:.42}}
+
+/* ---------- left rail : division layers ---------- */
+#railL{position:absolute;left:0;top:0;bottom:0;width:var(--rail-w);padding:18px 16px 22px 18px;overflow-y:auto;overscroll-behavior:contain;z-index:20;scrollbar-width:thin;scrollbar-color:#2a2c30 transparent}
+#railL::-webkit-scrollbar{width:5px}
+#railL::-webkit-scrollbar-thumb{background:#2a2c30}
+.rail-head{font-size:9.5px;letter-spacing:.24em;color:var(--bone-faint);margin:0 0 14px}
+.layer{border-top:1px solid var(--rule)}
+.layer:last-child{border-bottom:1px solid var(--rule)}
+.layer-btn{display:flex;width:100%;align-items:flex-start;gap:9px;padding:9px 0 8px;text-align:left;line-height:1.25}
+.layer-idx{font-size:9.5px;color:#45484d;padding-top:2px;min-width:15px}
+.layer-main{flex:1 1 auto;min-width:0}
+.layer-name{font-size:12.5px;letter-spacing:.02em;color:var(--bone-dim);transition:color .15s}
+.layer-btn:hover .layer-name{color:var(--bone)}
+.layer.on .layer-name{color:var(--bone)}
+.layer-pick{display:block;font-size:11px;margin-top:3px;color:var(--red);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer-share{font-size:10px;color:var(--bone-faint);padding-top:3px;letter-spacing:.02em}
+.cat{width:3px;align-self:stretch;margin:9px 0 8px;background:#26282c;flex:0 0 3px}
+.cat.structural{background:var(--blue)}
+.cat.identity{background:var(--red)}
+.cat.affinity{background:var(--bone-faint)}
+.cat.network{background:var(--sand)}
+.layer.off .cat{opacity:.3}
+.opts{display:none;padding:2px 0 12px 27px}
+.layer.open .opts{display:block}
+.opt{display:flex;width:100%;gap:8px;align-items:baseline;padding:4px 0;font-size:11.5px;color:var(--bone-dim);line-height:1.3;text-align:left}
+.opt:hover{color:var(--bone)}
+.opt.sel{color:var(--red)}
+.opt-l{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt-s{flex:0 0 auto;font-size:10px;color:#4b4e53}
+.opt-note{font-size:11px;color:var(--bone-faint);padding:4px 0 2px;line-height:1.45}
+.layer-tools{display:flex;gap:12px;padding:2px 0 10px 27px}
+.layer-tools button{font-size:10px;letter-spacing:.12em;color:var(--bone-faint)}
+.layer-tools button:hover{color:var(--bone)}
+.layer-tools button[disabled]{color:#303337;cursor:default}
+
+/* ---------- right rail : population ---------- */
+#railR{position:absolute;right:0;top:0;width:var(--stat-w);padding:16px 18px 0 0;text-align:right;z-index:20}
+#count{font-size:clamp(30px,4.6vw,62px);line-height:.94;letter-spacing:-.035em;font-weight:600;margin:0;word-break:break-all}
+#countCap{font-size:10.5px;letter-spacing:.2em;color:var(--bone-dim);margin:9px 0 0}
+.toggle{display:inline-flex;gap:0;margin:14px 0 0;border:1px solid var(--rule)}
+.toggle button{font-size:9.5px;letter-spacing:.16em;padding:5px 10px;color:var(--bone-faint)}
+.toggle button.on{background:var(--bone);color:var(--ink)}
+#pct{margin:16px 0 0;font-size:12.5px;color:var(--bone);letter-spacing:.01em}
+#pct b{color:var(--red);font-weight:600}
+#scaleNote{margin:9px 0 0;font-size:10.5px;color:var(--bone-faint);line-height:1.5}
+#estimate{margin:14px 0 0;font-size:9.5px;letter-spacing:.14em;color:#4b4e53}
+#methodBtn{margin-top:8px;font-size:10px;letter-spacing:.14em;color:#4b4e53;border-bottom:1px solid #2a2c30;padding-bottom:1px}
+#methodBtn:hover{color:var(--bone-dim)}
+#method{display:none;margin:12px 0 0;font-size:11px;line-height:1.6;color:var(--bone-faint);text-align:left;border-left:1px solid var(--rule);padding-left:12px}
+#method.open{display:block}
+#method p{margin:0 0 8px}
+
+/* ---------- camera ---------- */
+#cam{position:absolute;left:18px;bottom:16px;z-index:20;display:flex;gap:2px}
+#cam button{font-size:9.5px;letter-spacing:.16em;color:var(--bone-faint);padding:6px 10px;border:1px solid var(--rule)}
+#cam button:hover{color:var(--bone);border-color:#3a3d42}
+#cam button.on{color:var(--bone);border-color:var(--bone-faint)}
+
+/* ---------- the moment ---------- */
+#moment{position:absolute;left:calc(var(--rail-w) + 30px);top:50%;transform:translateY(-50%);z-index:30;max-width:min(460px,42vw);pointer-events:none;opacity:0;transition:opacity .7s ease}
+#moment.show{opacity:1}
+#moment .m-num{font-size:clamp(34px,5vw,62px);line-height:.95;letter-spacing:-.035em;font-weight:600}
+#moment .m-lab{font-size:10.5px;letter-spacing:.24em;color:var(--bone-dim);margin-top:10px}
+#moment .m-pct{font-size:13px;color:var(--red);margin-top:6px;letter-spacing:.02em}
+#moment .m-rule{width:52px;height:1px;background:var(--red);margin:22px 0 18px;transform-origin:left;transform:scaleX(0);transition:transform .8s cubic-bezier(.22,.61,.36,1) .5s}
+#moment.show .m-rule{transform:scaleX(1)}
+#moment .m-say{font-size:16px;line-height:1.55;color:var(--bone);max-width:32ch;opacity:0;transition:opacity .8s ease .9s}
+#moment.show .m-say{opacity:1}
+#moment .m-say span{color:var(--bone-dim);display:block}
+
+/* ---------- history ---------- */
+#history{flex:0 0 auto;position:relative;z-index:30;background:var(--ink);border-top:1px solid var(--rule);padding:0 18px}
+#chain{display:flex;align-items:stretch;gap:0;overflow-x:auto;overscroll-behavior-x:contain;padding:11px 0 12px;scrollbar-width:thin;scrollbar-color:#26282c transparent}
+#chain::-webkit-scrollbar{height:4px}
+#chain::-webkit-scrollbar-thumb{background:#26282c}
+.step{flex:0 0 auto;text-align:left;padding:0 15px 0 0;margin-right:15px;position:relative;min-width:0;line-height:1.25}
+.step:not(:last-child):after{content:"";position:absolute;right:0;top:50%;width:7px;height:1px;background:#33363a}
+.step-lab{font-size:9.5px;letter-spacing:.12em;color:var(--bone-faint);white-space:nowrap;max-width:22ch;overflow:hidden;text-overflow:ellipsis}
+.step-val{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-top:3px;white-space:nowrap;color:var(--bone-dim);transition:color .15s}
+.step:hover .step-val{color:var(--bone)}
+.step.cur .step-val{color:var(--bone)}
+.step.origin .step-val{color:var(--bone)}
+.step-pct{font-size:9.5px;color:#44474b;margin-top:2px;white-space:nowrap}
+
+/* ---------- mobile ---------- */
+#tray{display:none}
+#sheetClose{display:none}
+@media (max-width:880px), (max-height:560px){
+  :root{--rail-w:0px}
+  #masthead{padding:10px 14px 9px}
+  .brand{font-size:13px;letter-spacing:.28em}
+  .brand-sub{display:none}
+  .act{padding:6px 7px;font-size:9.5px}
+  #railR{position:absolute;left:14px;right:14px;top:12px;width:auto;padding:0;text-align:left}
+  #railR #count{font-size:clamp(34px,11.5vw,58px)}
+  #countCap{margin-top:6px;font-size:9.5px}
+  .toggle{margin-top:10px}
+  #pct{margin-top:10px;font-size:11.5px}
+  #scaleNote{display:none}
+  #estimate{margin-top:10px}
+  #methodBtn{display:none}
+  #method{display:none !important}
+  #cam{left:14px;bottom:12px}
+  #cam button{padding:7px 9px}
+  #moment{left:14px;right:14px;max-width:none;top:auto;bottom:22%;transform:none}
+  #moment .m-say{font-size:14px}
+  #history{padding:0 14px}
+  .step-val{font-size:13px}
+  #tray{display:block;flex:0 0 auto;position:relative;z-index:35;background:var(--ink);border-top:1px solid var(--rule);padding:0 0 env(safe-area-inset-bottom)}
+  #trayScroll{display:flex;gap:0;overflow-x:auto;padding:0 14px;scrollbar-width:none}
+  #trayScroll::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;padding:11px 13px 12px;text-align:left;border-right:1px solid var(--rule);line-height:1.2}
+  .chip:first-child{padding-left:0}
+  .chip-n{font-size:10.5px;letter-spacing:.04em;color:var(--bone-faint);white-space:nowrap}
+  .chip.on .chip-n{color:var(--bone)}
+  .chip-v{display:block;font-size:10px;margin-top:3px;color:var(--red);white-space:nowrap;max-width:15ch;overflow:hidden;text-overflow:ellipsis}
+  .chip-v.none{color:#3c3f43}
+  #railL{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;max-height:62vh;background:#0c0d0f;border-top:1px solid var(--rule);transform:translateY(101%);transition:transform .28s cubic-bezier(.3,.7,.3,1);padding:16px 16px calc(22px + env(safe-area-inset-bottom));z-index:60}
+  #railL.open{transform:translateY(0)}
+  .rail-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  #sheetClose{display:block;font-size:10px;letter-spacing:.16em;color:var(--bone-dim)}
+  .opt{padding:8px 0}
+  .layer-btn{padding:11px 0 10px}
+}
+@media (prefers-reduced-motion:reduce){
+  #moment,#moment .m-rule,#moment .m-say,#railL{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header id="masthead">
+    <div class="brand">DIVIDE<span class="brand-sub">THE DIVISION VISUALIZER</span></div>
+    <div class="mast-actions">
+      <button class="act" id="btnDemo">Run demo</button>
+      <button class="act" id="btnUndo" disabled>Undo</button>
+      <button class="act" id="btnReset" disabled>Reset</button>
+      <button class="act hot" id="btnReconnect" disabled>Remove the divisions</button>
+    </div>
+  </header>
+
+  <main id="stage">
+    <canvas id="field"></canvas>
+    <div id="vignette"></div>
+    <div id="reconnectWash"></div>
+
+    <div id="thesis">
+      <div class="t-big num">8,045,000,000</div>
+      <div class="t-small"><b>One human field.</b> Start drawing lines through it and watch how quickly most of humanity becomes someone else.</div>
+      <button id="beginDivide">BEGIN DIVIDING</button>
+    </div>
+
+    <div id="cutEvent" aria-live="polite">
+      <div class="cut-inner">
+        <div class="cut-layer" id="cutLayer"></div>
+        <div class="cut-flow"><span class="cut-num cut-from num" id="cutFrom"></span><span class="cut-arrow">→</span><span class="cut-num num" id="cutTo"></span></div>
+        <div class="cut-pct" id="cutPct"></div>
+      </div>
+    </div>
+
+    <aside id="railL">
+      <div class="rail-head"><span>DIVISION LAYERS</span><button id="sheetClose">CLOSE</button></div>
+      <div id="layers"></div>
+    </aside>
+
+    <aside id="railR">
+      <div id="count" class="num">8,045,000,000</div>
+      <div id="countCap">HUMANS CURRENTLY INCLUDED</div>
+      <div class="toggle">
+        <button id="tgRemain" class="on">REMAINING</button><button id="tgExcl">EXCLUDED</button>
+      </div>
+      <div id="pct">No divisions applied.</div>
+      <div id="scaleNote"></div>
+      <div id="estimate">ILLUSTRATIVE POPULATION ESTIMATE</div>
+      <button id="methodBtn">HOW THIS IS MODELLED</button>
+      <div id="method">
+        <p>Figures come from a seeded demographic model built on public population estimates. Shares within a nation are approximations and the categories have no clean scientific boundaries.</p>
+        <p>The crowd is a weighted sample, not a person-for-person rendering. Each figure stands for many people. When the included group falls below one figure, it is held at a minimum visible size.</p>
+        <p>Treat every number here as illustrative.</p>
+      </div>
+    </aside>
+
+    <div id="moment" aria-live="polite">
+      <div class="m-num num" id="mNum"></div>
+      <div class="m-lab" id="mLab">PEOPLE REMAIN</div>
+      <div class="m-pct" id="mPct"></div>
+      <div class="m-rule"></div>
+      <div class="m-say">These people did not become more human.<span>Everyone else simply became easier to ignore.</span></div>
+    </div>
+
+    <div id="cam">
+      <button id="camAll" class="on">VIEW ALL HUMANITY</button>
+      <button id="camFocus">FOCUS MY WORLD</button>
+    </div>
+  </main>
+
+  <footer id="history"><div id="chain"></div></footer>
+  <nav id="tray"><div id="trayScroll"></div></nav>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   DIVIDE V2 — the human field visualizer
+   One crowd. Progressively filtered. Nobody is deleted.
+   ============================================================ */
+
+/* ---------- tiny utils ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-Math.pow(1-t,3);
+const easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function weightedPick(rand,pairs){let tot=0;for(let i=0;i<pairs.length;i++)tot+=pairs[i][1];let r=rand()*tot;for(let i=0;i<pairs.length;i++){r-=pairs[i][1];if(r<=0)return pairs[i][0];}return pairs[pairs.length-1][0];}
+function toPairs(o){return Object.keys(o).map(k=>[k,o[k]]);}
+function commas(n){return Math.round(n).toLocaleString("en-US");}
+function shortNum(n){
+  n=Math.round(n);
+  if(n>=1e9) return (n/1e9).toFixed(n>=1e10?1:2).replace(/\.?0+$/,"")+"B";
+  if(n>=1e6) return (n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,"")+"M";
+  if(n>=1e3) return (n/1e3).toFixed(n>=1e5?0:1).replace(/\.0$/,"")+"K";
+  return String(n);
+}
+function pctStr(f){
+  const p=f*100;
+  if(p>=10) return p.toFixed(1)+"%";
+  if(p>=1) return p.toFixed(2)+"%";
+  if(p>=0.01) return p.toFixed(3)+"%";
+  if(p>=0.0001) return p.toFixed(5)+"%";
+  return p.toExponential(2)+"%";
+}
+
+/* ============================================================
+   1. POPULATION MODEL  (separate from the visual sample)
+   ============================================================ */
+const WORLD_POP = 8045000000;
+const M = 1e6;
+
+const CONTINENTS=[
+  {id:"asia",name:"Asia",pop:4740*M},
+  {id:"africa",name:"Africa",pop:1470*M},
+  {id:"europe",name:"Europe",pop:740*M},
+  {id:"northamerica",name:"North America",pop:600*M},
+  {id:"southamerica",name:"South America",pop:450*M},
+  {id:"oceania",name:"Oceania",pop:45*M}
+];
+
+/* id, name, continent, population (millions), income tier */
+const RAW_COUNTRIES=[
+ ["india","India","asia",1441,"lowerMid"],["china","China","asia",1416,"upperMid"],
+ ["indonesia","Indonesia","asia",281,"lowerMid"],["pakistan","Pakistan","asia",248,"lowerMid"],
+ ["bangladesh","Bangladesh","asia",174,"lowerMid"],["japan","Japan","asia",123,"high"],
+ ["philippines","Philippines","asia",118,"lowerMid"],["vietnam","Vietnam","asia",100,"lowerMid"],
+ ["iran","Iran","asia",91,"upperMid"],["turkey","Türkiye","asia",87,"upperMid"],
+ ["thailand","Thailand","asia",72,"upperMid"],["southkorea","South Korea","asia",52,"high"],
+ ["iraq","Iraq","asia",46,"lowerMid"],["saudi","Saudi Arabia","asia",34,"high"],
+ ["nigeria","Nigeria","africa",229,"lowerMid"],["ethiopia","Ethiopia","africa",129,"low"],
+ ["egypt","Egypt","africa",116,"lowerMid"],["drc","DR Congo","africa",106,"low"],
+ ["tanzania","Tanzania","africa",68,"low"],["southafrica","South Africa","africa",64,"upperMid"],
+ ["kenya","Kenya","africa",56,"lowerMid"],["sudan","Sudan","africa",50,"low"],
+ ["uganda","Uganda","africa",50,"low"],["algeria","Algeria","africa",47,"upperMid"],
+ ["morocco","Morocco","africa",38,"lowerMid"],["ghana","Ghana","africa",35,"lowerMid"],
+ ["russia","Russia","europe",144,"upperMid"],["germany","Germany","europe",84,"high"],
+ ["uk","United Kingdom","europe",69,"high"],["france","France","europe",68,"high"],
+ ["italy","Italy","europe",59,"high"],["spain","Spain","europe",48,"high"],
+ ["poland","Poland","europe",37,"high"],["ukraine","Ukraine","europe",37,"lowerMid"],
+ ["romania","Romania","europe",19,"upperMid"],["netherlands","Netherlands","europe",18,"high"],
+ ["usa","United States","northamerica",342,"high"],["mexico","Mexico","northamerica",130,"upperMid"],
+ ["canada","Canada","northamerica",40,"high"],["guatemala","Guatemala","northamerica",18,"lowerMid"],
+ ["haiti","Haiti","northamerica",12,"low"],["cuba","Cuba","northamerica",11,"upperMid"],
+ ["dominican","Dominican Republic","northamerica",11,"upperMid"],["honduras","Honduras","northamerica",11,"lowerMid"],
+ ["brazil","Brazil","southamerica",218,"upperMid"],["colombia","Colombia","southamerica",53,"upperMid"],
+ ["argentina","Argentina","southamerica",46,"upperMid"],["peru","Peru","southamerica",34,"upperMid"],
+ ["venezuela","Venezuela","southamerica",29,"lowerMid"],["chile","Chile","southamerica",20,"high"],
+ ["ecuador","Ecuador","southamerica",18,"upperMid"],
+ ["australia","Australia","oceania",27,"high"],["png","Papua New Guinea","oceania",10,"low"],
+ ["newzealand","New Zealand","oceania",5,"high"]
+];
+
+const COUNTRIES=RAW_COUNTRIES.map(c=>({id:c[0],name:c[1],cont:c[2],pop:c[3]*M,tier:c[4]}));
+/* remainder buckets so the model still adds to 8.045B */
+CONTINENTS.forEach(ct=>{
+  const listed=COUNTRIES.filter(c=>c.cont===ct.id).reduce((s,c)=>s+c.pop,0);
+  const rest=ct.pop-listed;
+  if(rest>2*M) COUNTRIES.push({id:"rest_"+ct.id,name:"Rest of "+ct.name,cont:ct.id,pop:rest,tier:ct.id==="europe"?"upperMid":(ct.id==="africa"?"low":"lowerMid"),generic:true});
+});
+const COUNTRY_BY_ID={};COUNTRIES.forEach(c=>COUNTRY_BY_ID[c.id]=c);
+const CONT_BY_ID={};CONTINENTS.forEach(c=>CONT_BY_ID[c.id]=c);
+
+/* ---- subdivisions (share of national population) ---- */
+const US_STATES=[["California",39.0],["Texas",30.5],["Florida",22.6],["New York",19.6],["Pennsylvania",13.0],["Illinois",12.6],["Ohio",11.8],["Georgia",11.0],["North Carolina",10.8],["Michigan",10.0],["New Jersey",9.3],["Virginia",8.7],["Washington",7.8],["Arizona",7.4],["Tennessee",7.1],["Massachusetts",7.0],["Indiana",6.9],["Missouri",6.2],["Maryland",6.2],["Wisconsin",5.9],["Colorado",5.9],["Minnesota",5.7],["South Carolina",5.4],["Alabama",5.1],["Louisiana",4.6],["Kentucky",4.5],["Oregon",4.2],["Oklahoma",4.1],["Connecticut",3.6],["Utah",3.4],["Iowa",3.2],["Nevada",3.2],["Arkansas",3.1],["Mississippi",2.9],["Kansas",2.9],["New Mexico",2.1],["Nebraska",2.0],["Idaho",2.0],["West Virginia",1.8],["Hawaii",1.4],["New Hampshire",1.4],["Maine",1.4],["Montana",1.1],["Rhode Island",1.1],["Delaware",1.0],["South Dakota",0.9],["North Dakota",0.8],["Alaska",0.73],["District of Columbia",0.67],["Vermont",0.65],["Wyoming",0.58]];
+
+const SUBS={
+ usa:US_STATES,
+ india:[["Uttar Pradesh",235],["Bihar",128],["Maharashtra",126],["West Bengal",100],["Madhya Pradesh",87],["Rajasthan",81],["Tamil Nadu",77],["Gujarat",72],["Karnataka",68],["Andhra Pradesh",54],["Odisha",46],["Jharkhand",40],["Telangana",39],["Kerala",36],["Assam",36],["Punjab",31],["Haryana",30],["Chhattisgarh",30],["Delhi",21],["Other states and territories",96]],
+ china:[["Guangdong",127],["Shandong",101],["Henan",98],["Jiangsu",85],["Sichuan",84],["Hebei",74],["Hunan",66],["Zhejiang",66],["Anhui",61],["Hubei",58],["Guangxi",50],["Yunnan",47],["Jiangxi",45],["Liaoning",42],["Fujian",42],["Shaanxi",40],["Guizhou",39],["Shanxi",35],["Chongqing",32],["Heilongjiang",31],["Xinjiang",26],["Gansu",25],["Shanghai",25],["Beijing",22],["Other provinces",105]],
+ brazil:[["São Paulo",44],["Minas Gerais",21],["Rio de Janeiro",17],["Bahia",15],["Paraná",12],["Rio Grande do Sul",11],["Pernambuco",9],["Ceará",9],["Pará",9],["Santa Catarina",8],["Goiás",7],["Other states",56]],
+ nigeria:[["North West",36],["North East",21],["North Central",25],["South West",45],["South East",23],["South South",29],["Federal Capital Territory",4],["Other areas",46]],
+ indonesia:[["West Java",50],["East Java",41],["Central Java",37],["North Sumatra",15],["Banten",12],["Jakarta",11],["South Sulawesi",9],["Other provinces",106]],
+ russia:[["Central",39],["Volga",29],["Siberian",17],["Southern",16],["North-Western",14],["Ural",12],["North Caucasian",10],["Far Eastern",8]],
+ mexico:[["State of Mexico",17],["Mexico City",9],["Jalisco",8],["Veracruz",8],["Puebla",6],["Guanajuato",6],["Nuevo León",6],["Other states",70]],
+ japan:[["Kantō",43],["Kansai",22],["Chūbu",21],["Kyūshū and Okinawa",14],["Tōhoku",8],["Chūgoku",7],["Hokkaidō",5],["Shikoku",3]],
+ germany:[["North Rhine-Westphalia",18],["Bavaria",13],["Baden-Württemberg",11],["Lower Saxony",8],["Hesse",6],["Saxony",4],["Rhineland-Palatinate",4],["Berlin",4],["Other states",16]],
+ uk:[["South East England",9.4],["London",8.9],["North West England",7.5],["East of England",6.4],["West Midlands",6.0],["South West England",5.7],["Yorkshire and the Humber",5.5],["Scotland",5.5],["East Midlands",4.9],["Wales",3.1],["North East England",2.7],["Northern Ireland",1.9]],
+ france:[["Île-de-France",12.3],["Auvergne-Rhône-Alpes",8.1],["Nouvelle-Aquitaine",6.1],["Occitanie",6.0],["Hauts-de-France",6.0],["Grand Est",5.6],["Provence-Alpes-Côte d'Azur",5.1],["Pays de la Loire",3.9],["Normandy",3.3],["Brittany",3.4],["Other regions",8.2]],
+ canada:[["Ontario",15.6],["Quebec",9.0],["British Columbia",5.6],["Alberta",4.8],["Manitoba",1.5],["Saskatchewan",1.2],["Nova Scotia",1.1],["Other provinces and territories",1.2]],
+ australia:[["New South Wales",8.4],["Victoria",6.9],["Queensland",5.5],["Western Australia",2.9],["South Australia",1.9],["Tasmania",0.6],["Other territories",0.5]],
+ egypt:[["Greater Cairo",25],["Nile Delta",38],["Alexandria",6],["Upper Egypt",40],["Canal and Sinai",7]],
+ pakistan:[["Punjab",128],["Sindh",56],["Khyber Pakhtunkhwa",41],["Balochistan",15],["Islamabad and territories",8]],
+ bangladesh:[["Dhaka",47],["Chattogram",34],["Rajshahi",22],["Khulna",19],["Rangpur",19],["Other divisions",33]],
+ philippines:[["Calabarzon",17],["Metro Manila",14],["Central Luzon",13],["Central Visayas",8],["Western Visayas",8],["Other regions",58]],
+ ethiopia:[["Oromia",42],["Amhara",25],["Southern regions",25],["Tigray",6],["Somali",7],["Addis Ababa and other",24]]
+};
+const GENERIC_SUBS=[["Capital region",0.11],["Major metropolitan areas",0.22],["Secondary cities",0.19],["Towns and small cities",0.21],["Rural areas",0.27]];
+
+function subsFor(countryId){
+  const raw=SUBS[countryId];
+  if(raw){
+    const tot=raw.reduce((s,r)=>s+r[1],0);
+    return raw.map(r=>({id:countryId+"|"+r[0],label:r[0],share:r[1]/tot}));
+  }
+  return GENERIC_SUBS.map(r=>({id:countryId+"|"+r[0],label:r[0],share:r[1]}));
+}
+
+/* ---- attribute distributions ---- */
+const GENDERS={male:"Male",female:"Female",other:"Another or custom gender"};
+const GENDER_DIST={male:.497,female:.497,other:.006};
+
+const ETH={african:"African / Black",eastAsian:"East Asian",southAsian:"South Asian",seAsian:"Southeast Asian",european:"European / White",latino:"Latino / Mestizo",mena:"Middle Eastern / North African",central:"Central and North Asian",indigenous:"Indigenous / First Nations",pacific:"Pacific Islander",mixed:"Multiracial / Mixed"};
+const ETH_BY_CONT={
+ asia:{southAsian:.42,eastAsian:.36,seAsian:.14,mena:.06,central:.02},
+ africa:{african:.90,mena:.085,mixed:.01,european:.005},
+ europe:{european:.87,mena:.05,central:.03,african:.02,southAsian:.01,mixed:.02},
+ northamerica:{latino:.56,european:.24,african:.11,mixed:.04,indigenous:.025,eastAsian:.015,southAsian:.01},
+ southamerica:{mixed:.40,european:.29,latino:.21,indigenous:.07,african:.03},
+ oceania:{european:.38,pacific:.33,seAsian:.10,eastAsian:.08,southAsian:.06,indigenous:.05}
+};
+const ETH_BY_COUNTRY={
+ usa:{european:.575,latino:.195,african:.125,eastAsian:.022,southAsian:.016,seAsian:.020,mena:.010,indigenous:.012,pacific:.003,mixed:.022},
+ india:{southAsian:.955,indigenous:.025,eastAsian:.012,mena:.008},
+ china:{eastAsian:.918,central:.038,seAsian:.022,southAsian:.012,mixed:.010},
+ brazil:{mixed:.45,european:.42,african:.101,indigenous:.012,eastAsian:.017},
+ nigeria:{african:.988,mena:.007,mixed:.005},
+ indonesia:{seAsian:.945,eastAsian:.021,southAsian:.011,pacific:.023},
+ russia:{european:.815,central:.098,mena:.052,eastAsian:.035},
+ mexico:{latino:.79,indigenous:.145,european:.05,mixed:.015},
+ japan:{eastAsian:.965,seAsian:.012,southAsian:.006,european:.006,mixed:.011},
+ germany:{european:.825,mena:.08,central:.03,african:.02,southAsian:.012,eastAsian:.01,mixed:.023},
+ uk:{european:.795,southAsian:.092,african:.041,mena:.018,eastAsian:.012,mixed:.042},
+ france:{european:.795,mena:.10,african:.05,seAsian:.02,mixed:.035},
+ canada:{european:.675,southAsian:.072,eastAsian:.071,african:.042,indigenous:.05,seAsian:.04,mena:.02,mixed:.03},
+ australia:{european:.715,eastAsian:.081,southAsian:.072,seAsian:.052,indigenous:.031,mena:.021,pacific:.018,mixed:.01},
+ southafrica:{african:.81,mixed:.089,european:.075,southAsian:.026}
+};
+function ethDist(countryId){
+  if(countryId&&ETH_BY_COUNTRY[countryId]) return ETH_BY_COUNTRY[countryId];
+  if(countryId&&COUNTRY_BY_ID[countryId]) return ETH_BY_CONT[COUNTRY_BY_ID[countryId].cont];
+  return {southAsian:.245,eastAsian:.205,african:.175,european:.125,seAsian:.095,latino:.06,mena:.055,central:.015,indigenous:.015,pacific:.005,mixed:.005};
+}
+
+const RELIGIONS={christian:"Christian",muslim:"Muslim",unaffiliated:"Unaffiliated",hindu:"Hindu",buddhist:"Buddhist",folk:"Folk or traditional",jewish:"Jewish",other:"Another faith"};
+const REL_BY_CONT={
+ asia:{muslim:.29,hindu:.255,unaffiliated:.21,buddhist:.11,christian:.09,folk:.04,other:.005},
+ africa:{christian:.49,muslim:.42,folk:.08,unaffiliated:.008,other:.002},
+ europe:{christian:.72,unaffiliated:.19,muslim:.07,jewish:.002,other:.018},
+ northamerica:{christian:.75,unaffiliated:.20,muslim:.015,jewish:.012,other:.023},
+ southamerica:{christian:.83,unaffiliated:.13,folk:.02,other:.02},
+ oceania:{christian:.62,unaffiliated:.29,muslim:.03,buddhist:.03,other:.03}
+};
+const REL_BY_COUNTRY={
+ usa:{christian:.63,unaffiliated:.29,jewish:.02,muslim:.011,hindu:.01,buddhist:.011,other:.028},
+ india:{hindu:.79,muslim:.145,christian:.023,buddhist:.007,other:.035},
+ china:{unaffiliated:.52,folk:.22,buddhist:.18,christian:.05,muslim:.018,other:.012},
+ indonesia:{muslim:.87,christian:.105,hindu:.017,buddhist:.007,other:.001},
+ nigeria:{christian:.46,muslim:.53,folk:.008,other:.002},
+ brazil:{christian:.855,unaffiliated:.11,folk:.02,other:.015},
+ japan:{unaffiliated:.57,folk:.22,buddhist:.19,christian:.015,other:.005},
+ uk:{christian:.46,unaffiliated:.44,muslim:.065,hindu:.017,jewish:.005,other:.013},
+ france:{christian:.50,unaffiliated:.40,muslim:.085,jewish:.006,other:.009},
+ germany:{christian:.51,unaffiliated:.41,muslim:.065,other:.015},
+ russia:{christian:.71,unaffiliated:.18,muslim:.10,other:.01},
+ mexico:{christian:.89,unaffiliated:.095,other:.015}
+};
+function relDist(countryId){
+  if(countryId&&REL_BY_COUNTRY[countryId]) return REL_BY_COUNTRY[countryId];
+  if(countryId&&COUNTRY_BY_ID[countryId]) return REL_BY_CONT[COUNTRY_BY_ID[countryId].cont];
+  return {christian:.31,muslim:.25,unaffiliated:.156,hindu:.15,buddhist:.066,folk:.056,jewish:.002,other:.01};
+}
+
+const INCOMES={extreme:"Under $2.15 a day",low:"$2.15 – $6.85 a day",lowerMid:"$6.85 – $20 a day",upperMid:"$20 – $50 a day",high:"Over $50 a day",top:"Top 1% of world income"};
+const INCOME_BY_TIER={
+ high:{extreme:.005,low:.022,lowerMid:.131,upperMid:.392,high:.405,top:.045},
+ upperMid:{extreme:.012,low:.101,lowerMid:.441,upperMid:.329,high:.108,top:.009},
+ lowerMid:{extreme:.098,low:.481,lowerMid:.321,upperMid:.081,high:.018,top:.001},
+ low:{extreme:.322,low:.519,lowerMid:.141,upperMid:.016,high:.0019,top:.0001}
+};
+const INCOME_WORLD={extreme:.085,low:.381,lowerMid:.329,upperMid:.141,high:.059,top:.005};
+function incomeDist(countryId){
+  const c=countryId?COUNTRY_BY_ID[countryId]:null;
+  return c?INCOME_BY_TIER[c.tier]:INCOME_WORLD;
+}
+
+const AGES={c:"Under 15",y:"15 to 24",a:"25 to 39",m:"40 to 54",s:"55 to 69",e:"70 and over"};
+const AGE_BY_TIER={
+ low:{c:.41,y:.20,a:.20,m:.11,s:.06,e:.02},
+ lowerMid:{c:.30,y:.18,a:.23,m:.15,s:.10,e:.04},
+ upperMid:{c:.21,y:.145,a:.235,m:.195,s:.145,e:.07},
+ high:{c:.163,y:.117,a:.201,m:.189,s:.187,e:.143}
+};
+const AGE_WORLD={c:.251,y:.155,a:.215,m:.174,s:.13,e:.075};
+function ageDist(countryId){
+  const c=countryId?COUNTRY_BY_ID[countryId]:null;
+  return c?AGE_BY_TIER[c.tier]:AGE_WORLD;
+}
+
+const POLITICS={left:"Left",centerLeft:"Centre-left",center:"Centre",centerRight:"Centre-right",right:"Right",disengaged:"Not politically aligned"};
+const POL_DIST={left:.12,centerLeft:.17,center:.21,centerRight:.17,right:.13,disengaged:.20};
+
+const LIFESTYLES={urban:"City dweller",town:"Town or suburb",rural:"Rural"};
+const LIFE_DIST={urban:.57,town:.20,rural:.23};
+
+const INTERESTS={music:["Music",.62],film:["Film and television",.58],cooking:["Cooking and food",.45],sport:["Sport",.48],faith:["A faith community",.38],outdoors:["The outdoors",.36],reading:["Reading",.34],gaming:["Gaming",.31],travel:["Travel",.29],tech:["Technology",.27],art:["Making art",.22],fashion:["Fashion and style",.24]};
+
+/* proximity and social-graph layers are absolute caps, not shares */
+const PROXIMITY=[
+ {id:"region",label:"Your wider region",cap:4000000},
+ {id:"metro",label:"Your city or metro area",cap:700000},
+ {id:"district",label:"Your district",cap:90000},
+ {id:"hood",label:"Your neighbourhood",cap:12000},
+ {id:"daily",label:"The streets you actually walk",cap:2500}
+];
+const SOCIAL=[
+ {id:"deg2",label:"Two degrees of separation",cap:25000},
+ {id:"deg1",label:"People you know by name",cap:600},
+ {id:"acq",label:"People you would recognise",cap:150},
+ {id:"reg",label:"People you speak to in a normal month",cap:30},
+ {id:"close",label:"People you are close to",cap:6}
+];
+
+/* ---------- layer definitions ---------- */
+const LAYERS=[
+ {id:"geography",idx:"01",name:"Geography",cat:"structural",kind:"cont"},
+ {id:"nation",idx:"02",name:"Nation",cat:"structural",kind:"country"},
+ {id:"region",idx:"03",name:"State / region",cat:"structural",kind:"region"},
+ {id:"gender",idx:"04",name:"Gender",cat:"identity",kind:"attr",attr:"gender",labels:GENDERS,dist:()=>GENDER_DIST},
+ {id:"ethnicity",idx:"05",name:"Race / ethnicity",cat:"identity",kind:"attr",attr:"eth",labels:ETH,dist:sc=>ethDist(sc.country),
+   note:"Coarse groupings with no clean boundaries. They are how people are sorted, not what people are."},
+ {id:"income",idx:"06",name:"Economic position",cat:"structural",kind:"attr",attr:"income",labels:INCOMES,dist:sc=>incomeDist(sc.country)},
+ {id:"age",idx:"07",name:"Age",cat:"identity",kind:"attr",attr:"age",labels:AGES,dist:sc=>ageDist(sc.country)},
+ {id:"religion",idx:"08",name:"Religion",cat:"identity",kind:"attr",attr:"religion",labels:RELIGIONS,dist:sc=>relDist(sc.country)},
+ {id:"politics",idx:"09",name:"Politics",cat:"identity",kind:"attr",attr:"politics",labels:POLITICS,dist:()=>POL_DIST},
+ {id:"interests",idx:"10",name:"Interests",cat:"affinity",kind:"interest"},
+ {id:"lifestyle",idx:"11",name:"Lifestyle",cat:"affinity",kind:"attr",attr:"life",labels:LIFESTYLES,dist:()=>LIFE_DIST},
+ {id:"proximity",idx:"12",name:"Social proximity",cat:"network",kind:"cap",caps:PROXIMITY,
+   note:"Not a share of anyone. A hard ceiling on how many people a body can actually be near."},
+ {id:"social",idx:"13",name:"Social graph",cat:"network",kind:"cap",caps:SOCIAL}
+];
+const LAYER_BY_ID={};LAYERS.forEach(l=>LAYER_BY_ID[l.id]=l);
+const CAT_NAME={structural:"structural",identity:"identity",affinity:"affinity",network:"network"};
+
+/* ---------- options for a layer, given prior selections ---------- */
+function scopeOf(filters,upto){
+  const sc={cont:null,country:null,region:null};
+  const n=upto===undefined?filters.length:upto;
+  for(let i=0;i<n;i++){
+    const f=filters[i];
+    if(f.layer==="geography") sc.cont=f.value;
+    else if(f.layer==="nation") sc.country=f.value;
+    else if(f.layer==="region") sc.region=f.value;
+  }
+  return sc;
+}
+
+function optionsFor(layerId,sc){
+  const L=LAYER_BY_ID[layerId];
+  if(L.kind==="cont") return CONTINENTS.map(c=>({value:c.id,label:c.name,share:c.pop/WORLD_POP}));
+  if(L.kind==="country"){
+    const pool=sc.cont?COUNTRIES.filter(c=>c.cont===sc.cont):COUNTRIES.slice();
+    const base=sc.cont?CONT_BY_ID[sc.cont].pop:WORLD_POP;
+    return pool.sort((a,b)=>b.pop-a.pop).map(c=>({value:c.id,label:c.name,share:c.pop/base}));
+  }
+  if(L.kind==="region"){
+    if(!sc.country) return [];
+    return subsFor(sc.country).map(s=>({value:s.id,label:s.label,share:s.share}));
+  }
+  if(L.kind==="attr"){
+    const d=L.dist(sc);
+    return toPairs(d).sort((a,b)=>b[1]-a[1]).map(p=>({value:p[0],label:L.labels[p[0]],share:p[1]}));
+  }
+  if(L.kind==="interest"){
+    return toPairs(INTERESTS).sort((a,b)=>b[1][1]-a[1][1]).map(p=>({value:p[0],label:p[1][0],share:p[1][1]}));
+  }
+  if(L.kind==="cap") return L.caps.map(c=>({value:c.id,label:c.label,cap:c.cap}));
+  return [];
+}
+
+function labelForFilter(f){
+  const L=LAYER_BY_ID[f.layer];
+  if(L.kind==="cont") return CONT_BY_ID[f.value].name;
+  if(L.kind==="country") return COUNTRY_BY_ID[f.value]?COUNTRY_BY_ID[f.value].name:f.value;
+  if(L.kind==="region") return f.value.split("|")[1];
+  if(L.kind==="attr") return L.labels[f.value];
+  if(L.kind==="interest") return INTERESTS[f.value][0];
+  if(L.kind==="cap"){const c=L.caps.find(c=>c.id===f.value);return c?c.label:f.value;}
+  return f.value;
+}
+
+/* ---------- run the population model over the ordered filter list ---------- */
+function runModel(filters){
+  let pop=WORLD_POP;
+  const steps=[];
+  for(let i=0;i<filters.length;i++){
+    const f=filters[i];
+    const L=LAYER_BY_ID[f.layer];
+    const sc=scopeOf(filters,i);
+    const before=pop;
+    if(L.kind==="cap"){
+      const c=L.caps.find(c=>c.id===f.value);
+      pop=Math.min(pop,c?c.cap:pop);
+    }else{
+      const opts=optionsFor(f.layer,sc);
+      const o=opts.find(o=>o.value===f.value);
+      pop=pop*(o?o.share:1);
+    }
+    steps.push({layer:f.layer,value:f.value,label:labelForFilter(f),pop:pop,
+      ofPrev:before>0?pop/before:0,ofWorld:pop/WORLD_POP,cat:L.cat});
+  }
+  return {pop:pop,steps:steps};
+}
+
+/* ============================================================
+   2. THE VISUAL SAMPLE — a crowd of weighted representatives
+   ============================================================ */
+const isSmall=Math.min(innerWidth,innerHeight)<640||innerWidth<880;
+const MIN_VIS=5;
+const SPAN=1.18;          /* horizontal world width — the crowd runs off both edges */
+
+/* The crowd is to scale until the included group gets down to KNEE figures.
+   Below that one figure would be less than one pixel of meaning, so the tail is
+   compressed: the group is drawn larger than it is, but still shrinks at every
+   step. The UI says so when it happens. */
+const KNEE=36, TAIL=0.30;
+function visualCount(frac){
+  const exact=N*frac;
+  if(exact>=KNEE) return Math.round(exact);
+  return Math.max(MIN_VIS,Math.round(KNEE*Math.pow(Math.max(exact,1e-12)/KNEE,TAIL)));
+}
+
+const rnd=mulberry32(20260913);
+const agents=[];
+let N=0;
+
+/* attribute draw, consistent with the population model */
+const countryPairs=COUNTRIES.map(c=>[c.id,c.pop]);
+const intKeys=Object.keys(INTERESTS);
+
+function makeAgent(i){
+  const country=weightedPick(rnd,countryPairs);
+  const c=COUNTRY_BY_ID[country];
+  const subs=subsFor(country);
+  const region=weightedPick(rnd,subs.map(s=>[s.id,s.share]));
+  const a={
+    id:i,
+    cont:c.cont,country:country,region:region,
+    gender:weightedPick(rnd,toPairs(GENDER_DIST)),
+    eth:weightedPick(rnd,toPairs(ethDist(country))),
+    income:weightedPick(rnd,toPairs(INCOME_BY_TIER[c.tier])),
+    age:weightedPick(rnd,toPairs(AGE_BY_TIER[c.tier])),
+    religion:weightedPick(rnd,toPairs(relDist(country))),
+    politics:weightedPick(rnd,toPairs(POL_DIST)),
+    life:weightedPick(rnd,toPairs(LIFE_DIST)),
+    ints:{}
+  };
+  for(let k=0;k<intKeys.length;k++){ if(rnd()<INTERESTS[intKeys[k]][1]) a.ints[intKeys[k]]=1; }
+  return a;
+}
+
+/* ---------- deterministic crowd layout ---------- */
+const ARCH_N=14, PAL_N=12;
+const FOCUS={x:.435,y:.70};
+
+function buildCrowd(){
+  /* pass 1: lay out rows in depth — small and tight at the back, large at the front */
+  const ROWS=isSmall?60:90;
+  const minS=isSmall?0.0055:0.0042, maxS=isSmall?0.052:0.0480;
+  const plan=[];
+  for(let row=0;row<ROWS;row++){
+    const t=row/(ROWS-1);
+    plan.push({
+      sz:lerp(minS,maxS,Math.pow(t,1.85)),
+      y:lerp(0.048,1.035,Math.pow(t,1.48))
+    });
+  }
+
+  /* pass 2: pick a figure count that holds a constant crowd density on this screen */
+  const stageW=Math.max(320,innerWidth);
+  const stageH=Math.max(240,innerHeight-(isSmall?190:132));
+  const gap=isSmall?0.95:1.35;                       /* spacing as a multiple of figure width */
+  let inv=0;plan.forEach(r=>inv+=1/r.sz);
+  let K=SPAN*stageW/(gap*stageH*0.70);
+  N=clamp(Math.round(K*inv),4500,19000);
+  K=N/inv;
+
+  let idx=0;
+  for(let row=0;row<ROWS;row++){
+    const r=plan[row];
+    const perRow=Math.max(14,Math.round(K/r.sz));
+    const jitterY=r.sz*0.34;
+    const phase=rnd();
+    for(let k=0;k<perRow;k++){
+      const a=makeAgent(idx);
+      a.x=-((SPAN-1)/2)+((k+phase+rnd()*1.30-0.15)/perRow*SPAN)%SPAN;
+      a.y=r.y+(rnd()-0.5)*jitterY;
+      a.size=r.sz*(0.84+rnd()*0.34);
+      a.arch=Math.floor(rnd()*ARCH_N);
+      a.pal=Math.floor(rnd()*PAL_N);
+      a.phase=rnd()*Math.PI*2;
+      a.sway=0.5+rnd();
+      a.row=row;
+      const dx=(a.x-FOCUS.x),dy=(a.y-FOCUS.y)*1.25;
+      a.dist=Math.sqrt(dx*dx+dy*dy);
+      a.v=1;a.vFrom=1;a.tv=1;a.t0=0;a.dur=1;a.pulse=0;a.pulseKind=0;a._sel=true;
+      agents.push(a);idx++;
+    }
+  }
+  N=agents.length;
+
+  /* V2: inclusion remains spatially scattered. The tiny lived world should first
+     be seen inside the full human field, not pre-clustered into a convenient island. */
+  for(const a of agents){
+    a.rank=rnd();
+    a.stag=clamp(0.5+(a.x-0.5)*0.8+(rnd()-0.5)*0.5,0,1);
+  }
+  agents.sort((p,q)=>p.row-q.row||p.y-q.y);
+}
+buildCrowd();
+
+/* ============================================================
+   3. SPRITE ATLAS — stylised human silhouettes
+   ============================================================ */
+const SKIN=["#f0d5ba","#e6c09c","#d5a87f","#bd8b61","#9c6d48","#7b5335","#5d3e28"];
+const CLOTH=["#7a5a6c","#4d6675","#8a6a4c","#5b6a52","#8c5450","#43506a","#9c8054","#6a5a7c","#6b4450","#566a6a","#7d6a8c","#8a7a64"];
+const HAIRC=["#181411","#241c17","#33261d","#4a423c","#6b5b48","#2b2018"];
+
+function shade(hex,f){
+  const n=parseInt(hex.slice(1),16);
+  let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=clamp(Math.round(r*f),0,255);g=clamp(Math.round(g*f),0,255);b=clamp(Math.round(b*f),0,255);
+  return "rgb("+r+","+g+","+b+")";
+}
+function greyOf(hex,base,spread){
+  const n=parseInt(hex.slice(1),16);
+  const lum=(((n>>16)&255)*.299+((n>>8)&255)*.587+(n&255)*.114)/255;
+  const v=clamp(Math.round(base+lum*spread),0,255);
+  return "rgb("+v+","+(v+2)+","+(v+5)+")";
+}
+/* pull a colour toward neutral — people, not a colour key */
+function mute(hex,amt,toward){
+  const n=parseInt(hex.slice(1),16), m=parseInt(toward.slice(1),16);
+  const r=Math.round(lerp((n>>16)&255,(m>>16)&255,amt));
+  const g=Math.round(lerp((n>>8)&255,(m>>8)&255,amt));
+  const b=Math.round(lerp(n&255,m&255,amt));
+  return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+
+const PALETTES=[];
+(function(){
+  const r=mulberry32(7716);
+  for(let i=0;i<PAL_N;i++){
+    const sk=mute(SKIN[Math.floor(r()*SKIN.length)],0.10,"#8a8078");
+    const cl=mute(CLOTH[Math.floor(r()*CLOTH.length)],0.22+r()*0.16,"#6b665f");
+    const ha=HAIRC[Math.floor(r()*HAIRC.length)];
+    PALETTES.push({
+      skin:sk, cloth:cl, pants:shade(cl,0.66), hair:ha,
+      gskin:greyOf(sk,56,44), gcloth:greyOf(cl,46,34), gpants:greyOf(cl,38,28), ghair:greyOf(ha,38,26)
+    });
+  }
+})();
+
+const ARCHS=[];
+(function(){
+  const r=mulberry32(4429);
+  for(let i=0;i<ARCH_N;i++){
+    const child=i<2, elder=(i===2||i===3);
+    ARCHS.push({
+      childish: child?(0.62+r()*0.10):(elder?0.93:0.94+r()*0.09),
+      stoop: elder?0.02+r()*0.02:r()*0.006,
+      headR: child?0.135+r()*0.02:0.100+r()*0.024,
+      lean:(r()-0.5)*0.05,
+      shoulder: child?0.26+r()*0.05:0.29+r()*0.15,
+      hip: 0.21+r()*0.12,
+      torso: 0.26+r()*0.08,
+      stance: 0.07+r()*0.20,
+      armOut: r()*0.075,
+      armRaise: r()<0.10?1:0,
+      hair: Math.floor(r()*5),
+      garment: r()<0.30?1:0,
+      sleeves: r()<0.58?1:0
+    });
+  }
+})();
+
+function drawFigure(g,W,H,a,p,grey){
+  const fh=H*a.childish;
+  const top=H-fh;
+  const cx=W/2;
+  const skin=grey?p.gskin:p.skin;
+  const cloth=grey?p.gcloth:p.cloth;
+  const pants=grey?p.gpants:p.pants;
+  const hair=grey?p.ghair:p.hair;
+
+  const headR=a.headR*fh;
+  const hairPad=a.hair===3?headR*0.40:(a.hair===2?headR*0.26:headR*0.13);
+  const hcx=cx+a.lean*fh;
+  const hcy=top+headR+hairPad;
+  const shoulderY=hcy+headR*1.42+a.stoop*fh;
+  const hipY=shoulderY+a.torso*fh;
+  const footY=H-fh*0.012;
+  const sw=a.shoulder*fh, hw=a.hip*fh;
+
+  g.lineJoin="round";g.lineCap="round";
+
+  /* legs */
+  g.strokeStyle=pants;g.lineWidth=Math.max(0.8,fh*0.085);
+  g.beginPath();
+  g.moveTo(cx-hw*0.25,hipY);g.lineTo(cx-a.stance*fh*0.5,footY);
+  g.moveTo(cx+hw*0.25,hipY);g.lineTo(cx+a.stance*fh*0.5,footY);
+  g.stroke();
+
+  /* skirt or long garment */
+  if(a.garment){
+    g.fillStyle=cloth;
+    g.beginPath();
+    g.moveTo(cx-hw*0.52,hipY-fh*0.03);
+    g.lineTo(cx+hw*0.52,hipY-fh*0.03);
+    g.lineTo(cx+hw*0.80,hipY+fh*0.17);
+    g.lineTo(cx-hw*0.80,hipY+fh*0.17);
+    g.closePath();g.fill();
+  }
+
+  /* torso */
+  g.fillStyle=cloth;
+  g.beginPath();
+  g.moveTo(hcx-sw*0.5,shoulderY);
+  g.quadraticCurveTo(hcx,shoulderY-fh*0.022,hcx+sw*0.5,shoulderY);
+  g.lineTo(cx+hw*0.5,hipY+fh*0.015);
+  g.lineTo(cx-hw*0.5,hipY+fh*0.015);
+  g.closePath();g.fill();
+
+  /* arms */
+  g.strokeStyle=a.sleeves?cloth:skin;
+  g.lineWidth=Math.max(0.7,fh*0.066);
+  g.beginPath();
+  g.moveTo(hcx-sw*0.44,shoulderY+fh*0.012);
+  g.lineTo(cx-sw*0.50-a.armOut*fh,hipY+fh*0.045);
+  if(a.armRaise){
+    g.moveTo(hcx+sw*0.44,shoulderY+fh*0.012);
+    g.lineTo(cx+sw*0.60+a.armOut*fh,shoulderY-fh*0.20);
+  }else{
+    g.moveTo(hcx+sw*0.44,shoulderY+fh*0.012);
+    g.lineTo(cx+sw*0.50+a.armOut*fh,hipY+fh*0.045);
+  }
+  g.stroke();
+
+  /* hair behind */
+  g.fillStyle=hair;
+  if(a.hair===1){
+    g.beginPath();
+    g.moveTo(hcx-headR*1.08,hcy-headR*0.45);
+    g.lineTo(hcx+headR*1.08,hcy-headR*0.45);
+    g.lineTo(hcx+headR*0.92,shoulderY+fh*0.035);
+    g.lineTo(hcx-headR*0.92,shoulderY+fh*0.035);
+    g.closePath();g.fill();
+  }else if(a.hair===3){
+    g.beginPath();g.arc(hcx,hcy-headR*0.26,headR*1.40,0,6.2832);g.fill();
+  }else if(a.hair===2){
+    g.beginPath();g.arc(hcx,hcy-headR*1.18,headR*0.46,0,6.2832);g.fill();
+  }
+
+  /* neck */
+  g.fillStyle=skin;
+  g.fillRect(hcx-headR*0.32,hcy+headR*0.45,headR*0.64,shoulderY-hcy-headR*0.40);
+
+  /* head */
+  g.beginPath();g.arc(hcx,hcy,headR,0,6.2832);g.fill();
+
+  /* hair on top */
+  g.fillStyle=hair;
+  if(a.hair===0||a.hair===1||a.hair===2){
+    g.beginPath();g.arc(hcx,hcy,headR*1.045,Math.PI*1.02,Math.PI*1.98);g.closePath();g.fill();
+  }else if(a.hair===4){
+    g.beginPath();g.arc(hcx,hcy-headR*0.06,headR*1.10,Math.PI*1.02,Math.PI*1.98);g.closePath();g.fill();
+    g.fillRect(hcx-headR*1.25,hcy-headR*0.16,headR*2.5,Math.max(0.7,headR*0.20));
+  }
+}
+
+/* build three mip levels of the atlas */
+const MIPS=[{h:76},{h:34},{h:15}];
+MIPS.forEach(m=>{m.w=Math.round(m.h*0.70);});
+const atlases=MIPS.map(m=>{
+  const cv=document.createElement("canvas");
+  cv.width=ARCH_N*m.w;
+  cv.height=PAL_N*2*m.h;
+  const g=cv.getContext("2d");
+  for(let ai=0;ai<ARCH_N;ai++){
+    for(let pi=0;pi<PAL_N;pi++){
+      for(let st=0;st<2;st++){
+        g.save();
+        g.translate(ai*m.w,(pi*2+st)*m.h);
+        g.beginPath();g.rect(0,0,m.w,m.h);g.clip();
+        if(st===1&&("filter" in g)) g.filter=m.h>20?"blur(0.7px)":"blur(0.35px)";
+        drawFigure(g,m.w,m.h,ARCHS[ai],PALETTES[pi],st===1);
+        if("filter" in g) g.filter="none";
+        g.restore();
+      }
+    }
+  }
+  m.canvas=cv;
+  return m;
+});
+
+/* ============================================================
+   4. STATE
+   ============================================================ */
+const state={
+  filters:[],
+  pop:WORLD_POP,
+  steps:[],
+  displayPop:WORLD_POP,
+  popFrom:WORLD_POP,popTo:WORLD_POP,popT0:0,popDur:1,
+  mode:"remaining",
+  openLayer:null,
+  momentShown:false,
+  momentHold:0,
+  camFocus:false,
+  cam:{s:1,x:0,y:0},
+  camTarget:{s:1,x:0,y:0},
+  camFrom:{s:1,x:0,y:0},
+  camT0:0,camDur:1,
+  demo:null,
+  reconnect:null,
+  finale:false,
+  compressed:false,
+  visualShortfall:false,
+  lastCut:null
+};
+
+/* ============================================================
+   5. CANVAS RENDERER
+   ============================================================ */
+const cv=document.getElementById("field");
+const ctx=cv.getContext("2d",{alpha:false});
+let VW=0,VH=0,DPR=1;
+
+function resize(){
+  const r=cv.getBoundingClientRect();
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  VW=Math.max(320,r.width);VH=Math.max(240,r.height);
+  cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);
+}
+window.addEventListener("resize",resize);
+
+const pulseRed=[],pulseWhite=[];
+
+function render(now){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle="#08090a";
+  ctx.fillRect(0,0,VW,VH);
+
+  /* camera easing */
+  if(state.camT0){
+    const p=clamp((now-state.camT0)/state.camDur,0,1);
+    const e=easeInOut(p);
+    state.cam.s=lerp(state.camFrom.s,state.camTarget.s,e);
+    state.cam.x=lerp(state.camFrom.x,state.camTarget.x,e);
+    state.cam.y=lerp(state.camFrom.y,state.camTarget.y,e);
+    if(p>=1) state.camT0=0;
+  }
+  const CS=state.cam.s, CX=state.cam.x, CY=state.cam.y;
+  const t=now*0.001;
+
+  pulseRed.length=0;pulseWhite.length=0;
+
+  for(let i=0;i<N;i++){
+    const a=agents[i];
+
+    /* per-agent inclusion transition */
+    if(a.t0){
+      const p=clamp((now-a.t0)/a.dur,0,1);
+      a.v=lerp(a.vFrom,a.tv,easeOut(p));
+      if(p>=1){a.v=a.tv;a.t0=0;}
+    }
+    if(a.pulse>0) a.pulse=Math.max(0,a.pulse-0.022);
+
+    const h=a.size*VH*CS;
+    if(h<0.55) continue;
+    const w=h*0.70;
+    const sway=Math.sin(t*0.55*a.sway+a.phase)*h*0.022*(0.55+0.9*a.v);
+    const x=(a.x*VW+CX)*CS+(VW*(1-CS))*0.5+sway-w*0.5;
+    const y=(a.y*VH+CY)*CS+(VH*(1-CS))*0.5-h;
+    if(x<-w-4||x>VW+4||y<-h-4||y>VH+4) continue;
+
+    const mip=h>38?0:(h>17?1:2);
+    const m=MIPS[mip];
+    const sx=a.arch*m.w, syBase=a.pal*2*m.h;
+
+    if(a.v<0.996){
+      /* Excluded people remain physically present, but recede from lived attention. */
+      ctx.globalAlpha=0.18 + a.v*0.20;
+      const recede=1.0-(1.0-a.v)*0.045;
+      const rw=w*recede,rh=h*recede;
+      ctx.drawImage(m.canvas,sx,syBase+m.h,m.w,m.h,x+(w-rw)*0.5,y+(h-rh)*0.55,rw,rh);
+      ctx.globalAlpha=1;
+    }
+    if(a.v>0.004){
+      if(a.v<1) ctx.globalAlpha=a.v;
+      ctx.drawImage(m.canvas,sx,syBase,m.w,m.h,x,y,w,h);
+      if(a.v<1) ctx.globalAlpha=1;
+    }
+    if(a.pulse>0.01){
+      const arr=a.pulseKind===1?pulseWhite:pulseRed;
+      arr.push(x,y,w,h,a.pulse);
+    }
+  }
+
+  /* batched highlight pass — a shimmer passing through the crowd */
+  if(pulseRed.length||pulseWhite.length){
+    ctx.globalCompositeOperation="lighter";
+    if(pulseRed.length){
+      for(let i=0;i<pulseRed.length;i+=5){
+        ctx.globalAlpha=pulseRed[i+4]*0.30;
+        ctx.fillStyle="#b81f2e";
+        ctx.fillRect(pulseRed[i],pulseRed[i+1]+pulseRed[i+3]*0.18,pulseRed[i+2],pulseRed[i+3]*0.78);
+      }
+    }
+    if(pulseWhite.length){
+      for(let i=0;i<pulseWhite.length;i+=5){
+        ctx.globalAlpha=pulseWhite[i+4]*0.26;
+        ctx.fillStyle="#cfc7bd";
+        ctx.fillRect(pulseWhite[i],pulseWhite[i+1]+pulseWhite[i+3]*0.16,pulseWhite[i+2],pulseWhite[i+3]*0.80);
+      }
+    }
+    ctx.globalCompositeOperation="source-over";
+    ctx.globalAlpha=1;
+  }
+}
+
+/* ---------- counter animation ---------- */
+function tickCounter(now){
+  if(!state.popT0) return;
+  const p=clamp((now-state.popT0)/state.popDur,0,1);
+  state.displayPop=lerp(state.popFrom,state.popTo,easeOut(p));
+  paintCounter();
+  if(p>=1) state.popT0=0;
+}
+
+let last=0;
+function frame(now){
+  render(now);
+  tickCounter(now);
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   6. APPLYING FILTERS
+   ============================================================ */
+function matches(a,filters){
+  for(let i=0;i<filters.length;i++){
+    const f=filters[i];
+    const L=LAYER_BY_ID[f.layer];
+    if(L.kind==="cont"){ if(a.cont!==f.value) return false; }
+    else if(L.kind==="country"){ if(a.country!==f.value) return false; }
+    else if(L.kind==="region"){ if(a.region!==f.value) return false; }
+    else if(L.kind==="attr"){ if(a[L.attr]!==f.value) return false; }
+    else if(L.kind==="interest"){ if(!a.ints[f.value]) return false; }
+    /* cap layers have no attribute — they narrow the count, not the kind of person */
+  }
+  return true;
+}
+
+const matchedBuf=[],unmatchedBuf=[];
+
+function recompute(opts){
+  opts=opts||{};
+  const model=runModel(state.filters);
+  state.pop=model.pop;
+  state.steps=model.steps;
+
+  const frac=state.pop/WORLD_POP;
+  const exact=N*frac;
+  const target=clamp(visualCount(frac),MIN_VIS,N);
+  state.compressed=exact<KNEE&&state.filters.length>0;
+
+  matchedBuf.length=0;unmatchedBuf.length=0;
+  for(let i=0;i<N;i++){
+    const a=agents[i];
+    (matches(a,state.filters)?matchedBuf:unmatchedBuf).push(a);
+    a._sel=false;
+  }
+  matchedBuf.sort((p,q)=>p.rank-q.rank);
+  const take=Math.min(target,matchedBuf.length);
+  for(let i=0;i<take;i++) matchedBuf[i]._sel=true;
+  /* Never fabricate survivors from the unmatched pool. If the finite visual sample
+     cannot represent the model target exactly, fidelity wins over sprite count. */
+  state.visualShortfall=take<target;
+
+  const now=performance.now();
+  const dur=opts.instant?1:760;
+  const stagMax=opts.instant?0:620;
+  for(let i=0;i<N;i++){
+    const a=agents[i];
+    const tv=a._sel?1:0;
+    if(tv!==a.tv||opts.instant){
+      if(!opts.instant&&tv!==a.tv){ a.pulse=1;a.pulseKind=tv===1?1:0; }
+      a.vFrom=a.v;a.tv=tv;
+      a.t0=now+a.stag*stagMax;a.dur=dur;
+    }
+  }
+
+  /* counter */
+  state.popFrom=state.displayPop;
+  state.popTo=state.pop;
+  state.popT0=now;
+  state.popDur=opts.instant?1:1150;
+  if(opts.instant){state.displayPop=state.pop;}
+
+  paintAll();
+  if(state.camFocus) setTimeout(focusSurvivors,700);
+  maybeMoment();
+}
+
+/* ---------- the moment ---------- */
+const momentEl=document.getElementById("moment");
+function maybeMoment(){
+  if(state.momentShown||state.finale) return;
+  if(state.pop<250000&&state.filters.length>0){
+    state.momentShown=true;
+    document.getElementById("mNum").textContent=commas(state.pop);
+    document.getElementById("mLab").textContent="PEOPLE REMAIN";
+    document.getElementById("mPct").textContent=pctStr(state.pop/WORLD_POP)+" of humanity";
+    momentEl.querySelector(".m-say").innerHTML="These people did not become more human.<span>Everyone else simply became easier to ignore.</span>";
+    setTimeout(()=>momentEl.classList.add("show"),620);
+    state.momentHold=performance.now();
+    setTimeout(()=>{momentEl.classList.remove("show");},9000);
+  }
+}
+function showFinale(){
+  state.finale=true;
+  document.getElementById("mNum").textContent="NONE OF THEM CAME BACK";
+  document.getElementById("mLab").textContent="THEY NEVER LEFT";
+  document.getElementById("mPct").textContent="8,045,000,000 humans were here the whole time.";
+  momentEl.querySelector(".m-say").innerHTML="The divisions disappeared.<span>The people did not need to return.</span>";
+  momentEl.classList.add("show");
+  setTimeout(()=>{momentEl.classList.remove("show");state.finale=false;},8000);
+}
+
+const cutEvent=document.getElementById("cutEvent");
+let cutTimer=0;
+function showCutEvent(layerId,value,before,after){
+  if(before===after) return;
+  const L=LAYER_BY_ID[layerId];
+  let label=L?L.name:layerId;
+  try{ label += " · " + labelForFilter({layer:layerId,value:value}); }catch(e){}
+  document.getElementById("cutLayer").textContent=label;
+  document.getElementById("cutFrom").textContent=shortNum(before);
+  document.getElementById("cutTo").textContent=shortNum(after);
+  const retained=before>0?after/before:1;
+  document.getElementById("cutPct").textContent=pctStr(retained)+" of the previous human field remains inside this line";
+  cutEvent.classList.remove("show"); void cutEvent.offsetWidth; cutEvent.classList.add("show");
+  clearTimeout(cutTimer); cutTimer=setTimeout(()=>cutEvent.classList.remove("show"),1600);
+}
+
+/* ============================================================
+   7. UI PAINTING
+   ============================================================ */
+const layersEl=document.getElementById("layers");
+const chainEl=document.getElementById("chain");
+const trayEl=document.getElementById("trayScroll");
+const countEl=document.getElementById("count");
+const countCapEl=document.getElementById("countCap");
+const pctEl=document.getElementById("pct");
+const scaleNoteEl=document.getElementById("scaleNote");
+
+function selectedFor(layerId){
+  return state.filters.find(f=>f.layer===layerId)||null;
+}
+
+function paintCounter(){
+  const remaining=state.displayPop;
+  const excluded=WORLD_POP-remaining;
+  const show=state.mode==="remaining"?remaining:excluded;
+  countEl.textContent=commas(Math.max(0,show));
+  countCapEl.textContent=state.mode==="remaining"?"HUMANS CURRENTLY INCLUDED":"HUMANS CURRENTLY EXCLUDED";
+}
+
+function paintStats(){
+  const f=state.pop/WORLD_POP;
+  if(state.filters.length===0){
+    pctEl.textContent="No divisions applied.";
+    scaleNoteEl.textContent="Every figure on screen stands for about "+commas(WORLD_POP/N)+" people.";
+  }else if(state.mode==="remaining"){
+    pctEl.innerHTML="<b>"+pctStr(f)+"</b> of humanity remains inside the line.";
+    scaleNoteEl.textContent=state.visualShortfall
+      ? "The finite crowd sample cannot represent this combination exactly. Only matching figures are shown."
+      : (state.compressed
+        ? "Below about "+shortNum(KNEE*WORLD_POP/N)+" people the crowd stops being to scale. The included group is drawn larger than it is so you can still watch it shrink."
+        : "Each figure stands for about "+commas(WORLD_POP/N)+" people.");
+  }else{
+    pctEl.innerHTML="<b>"+pctStr(1-f)+"</b> of humanity has been put outside it.";
+    scaleNoteEl.textContent=commas(WORLD_POP-state.pop)+" people are still on screen. None of them left.";
+  }
+}
+
+const PRIMARY_LAYERS=new Set(["gender","ethnicity","income","nation","region","social"]);
+function paintLayers(){
+  const frag=document.createDocumentFragment();
+  const ordered=LAYERS.filter(L=>PRIMARY_LAYERS.has(L.id)).concat([{id:"__more__"}],LAYERS.filter(L=>!PRIMARY_LAYERS.has(L.id)));
+  ordered.forEach(L=>{
+    if(L.id==="__more__"){
+      const more=document.createElement("button");
+      more.id="moreDivisions";
+      more.textContent=document.body.classList.contains("more-open")?"− FEWER DIVISIONS":"+ MORE DIVISIONS";
+      more.addEventListener("click",()=>{document.body.classList.toggle("more-open");paintLayers();});
+      frag.appendChild(more);
+      return;
+    }
+    const sel=selectedFor(L.id);
+    const step=sel?state.steps.find(s=>s.layer===L.id):null;
+    const wrap=document.createElement("div");
+    wrap.className="layer"+(sel?" on":" off")+(state.openLayer===L.id?" open":"")+(PRIMARY_LAYERS.has(L.id)?" primary":" extra");
+
+    const btn=document.createElement("button");
+    btn.className="layer-btn";
+    btn.setAttribute("aria-expanded",state.openLayer===L.id?"true":"false");
+    btn.innerHTML='<span class="layer-idx num">'+L.idx+'</span>'+
+      '<span class="cat '+L.cat+'"></span>'+
+      '<span class="layer-main"><span class="layer-name">'+L.name+'</span>'+
+      (sel?'<span class="layer-pick">'+labelForFilter(sel)+'</span>':'')+'</span>'+
+      (step?'<span class="layer-share num">'+pctStr(step.ofPrev)+'</span>':'');
+    btn.addEventListener("click",()=>{
+      stopAuto();
+      const t=document.getElementById("thesis");if(t&&t.style.display!=="none"){t.classList.add("hide");setTimeout(()=>t.style.display="none",720);}
+      state.openLayer=state.openLayer===L.id?null:L.id;paintLayers();
+    });
+    wrap.appendChild(btn);
+
+    if(state.openLayer===L.id){
+      const opts=document.createElement("div");
+      opts.className="opts";
+      const sc=scopeOf(state.filters,state.filters.findIndex(f=>f.layer===L.id)>=0?state.filters.findIndex(f=>f.layer===L.id):undefined);
+      const list=optionsFor(L.id,sc);
+      if(L.note){
+        const n=document.createElement("div");n.className="opt-note";n.textContent=L.note;opts.appendChild(n);
+      }
+      if(L.kind==="region"&&!sc.country){
+        const n=document.createElement("div");n.className="opt-note";
+        n.textContent="Choose a nation first. Regions only exist inside one.";
+        opts.appendChild(n);
+      }
+      list.forEach(o=>{
+        const b=document.createElement("button");
+        b.className="opt"+(sel&&sel.value===o.value?" sel":"");
+        const right=o.cap!==undefined?("max "+shortNum(o.cap)):pctStr(o.share);
+        b.innerHTML='<span class="opt-l">'+o.label+'</span><span class="opt-s num">'+right+'</span>';
+        b.addEventListener("click",()=>{stopAuto();applyFilter(L.id,o.value);});
+        opts.appendChild(b);
+      });
+      if(sel){
+        const tools=document.createElement("div");
+        tools.className="layer-tools";
+        const i=state.filters.indexOf(sel);
+        const up=document.createElement("button");up.textContent="↑ EARLIER";up.disabled=i<=0;
+        up.addEventListener("click",()=>{stopAuto();moveFilter(i,-1);});
+        const dn=document.createElement("button");dn.textContent="↓ LATER";dn.disabled=i>=state.filters.length-1;
+        dn.addEventListener("click",()=>{stopAuto();moveFilter(i,1);});
+        const rm=document.createElement("button");rm.textContent="✕ REMOVE";
+        rm.addEventListener("click",()=>{stopAuto();removeFilter(L.id);});
+        tools.appendChild(up);tools.appendChild(dn);tools.appendChild(rm);
+        opts.appendChild(tools);
+      }
+      wrap.appendChild(opts);
+    }
+    frag.appendChild(wrap);
+  });
+  layersEl.innerHTML="";
+  layersEl.appendChild(frag);
+  paintTray();
+}
+
+function paintTray(){
+  const frag=document.createDocumentFragment();
+  LAYERS.forEach(L=>{
+    const sel=selectedFor(L.id);
+    const b=document.createElement("button");
+    b.className="chip"+(sel?" on":"");
+    b.innerHTML='<span class="chip-n">'+L.name+'</span><span class="chip-v'+(sel?'':' none')+'">'+(sel?labelForFilter(sel):"—")+'</span>';
+    b.addEventListener("click",()=>{
+      stopAuto();
+      state.openLayer=L.id;
+      paintLayers();
+      document.getElementById("railL").classList.add("open");
+      const el=layersEl.querySelector(".layer.open");
+      if(el) el.scrollIntoView({block:"start"});
+    });
+    frag.appendChild(b);
+  });
+  trayEl.innerHTML="";
+  trayEl.appendChild(frag);
+}
+
+function paintChain(){
+  const frag=document.createDocumentFragment();
+  const origin=document.createElement("button");
+  origin.className="step origin"+(state.filters.length===0?" cur":"");
+  origin.innerHTML='<span class="step-lab">EVERYONE</span><span class="step-val num">8.0B</span><span class="step-pct">100%</span>';
+  origin.addEventListener("click",()=>{stopAuto();truncateTo(0);});
+  frag.appendChild(origin);
+
+  state.steps.forEach((s,i)=>{
+    const b=document.createElement("button");
+    b.className="step"+(i===state.steps.length-1?" cur":"")+(s.ofPrev<0.25?" cut-heavy":"");
+    b.innerHTML='<span class="step-lab">'+s.label+'</span>'+
+      '<span class="step-val num">'+shortNum(s.pop)+'</span>'+
+      '<span class="step-pct num">'+pctStr(s.ofPrev)+' remained</span>';
+    b.addEventListener("click",()=>{stopAuto();truncateTo(i+1);});
+    frag.appendChild(b);
+  });
+  chainEl.innerHTML="";
+  chainEl.appendChild(frag);
+  chainEl.scrollLeft=chainEl.scrollWidth;
+}
+
+function paintActions(){
+  const any=state.filters.length>0;
+  document.getElementById("btnUndo").disabled=!any;
+  document.getElementById("btnReset").disabled=!any;
+  document.getElementById("btnReconnect").disabled=!any;
+}
+
+function paintAll(){
+  paintCounter();paintStats();paintLayers();paintChain();paintActions();
+}
+
+/* ============================================================
+   8. ACTIONS
+   ============================================================ */
+function applyFilter(layerId,value){
+  const before=state.pop;
+  const existing=state.filters.findIndex(f=>f.layer===layerId);
+  if(existing>=0){
+    if(state.filters[existing].value===value){ removeFilter(layerId); return; }
+    state.filters[existing]={layer:layerId,value:value};
+  }else{
+    state.filters.push({layer:layerId,value:value});
+  }
+  /* a nation change invalidates the region under it */
+  if(layerId==="nation"||layerId==="geography"){
+    const r=state.filters.findIndex(f=>f.layer==="region");
+    if(r>=0){
+      const sc=scopeOf(state.filters,r);
+      const valid=sc.country&&state.filters[r].value.split("|")[0]===sc.country;
+      if(!valid) state.filters.splice(r,1);
+    }
+    if(layerId==="geography"){
+      const n=state.filters.findIndex(f=>f.layer==="nation");
+      if(n>=0&&COUNTRY_BY_ID[state.filters[n].value].cont!==value) state.filters.splice(n,1);
+    }
+  }
+  recompute();
+  showCutEvent(layerId,value,before,state.pop);
+}
+function removeFilter(layerId){
+  const i=state.filters.findIndex(f=>f.layer===layerId);
+  if(i<0) return;
+  state.filters.splice(i,1);
+  if(layerId==="nation"){
+    const r=state.filters.findIndex(f=>f.layer==="region");
+    if(r>=0) state.filters.splice(r,1);
+  }
+  recompute();
+}
+function moveFilter(i,d){
+  const j=i+d;
+  if(j<0||j>=state.filters.length) return;
+  const t=state.filters[i];state.filters[i]=state.filters[j];state.filters[j]=t;
+  recompute();
+}
+function truncateTo(n){
+  if(n>=state.filters.length&&n!==0) return;
+  state.filters=state.filters.slice(0,n);
+  recompute();
+}
+function resetAll(){
+  state.filters=[];
+  state.momentShown=false;
+  momentEl.classList.remove("show");
+  recompute();
+  viewAll();
+}
+
+/* ---------- camera ---------- */
+function setCam(s,x,y,dur){
+  state.camFrom={s:state.cam.s,x:state.cam.x,y:state.cam.y};
+  state.camTarget={s:s,x:x,y:y};
+  state.camT0=performance.now();
+  state.camDur=dur||1100;
+}
+function viewAll(){
+  state.camFocus=false;
+  document.getElementById("camAll").classList.add("on");
+  document.getElementById("camFocus").classList.remove("on");
+  setCam(1,0,0,1100);
+}
+/* keep the viewport inside the field so zooming never reveals the edge of the world */
+function clampCam(s,x,y){
+  const xMin=-((SPAN-1)/2)-0.02, xMax=1+((SPAN-1)/2)+0.02, yMin=0.015, yMax=1.01;
+  if(s<=1.001) return {s:s,x:0,y:0};
+  let cx=x/VW, cy=y/VH;
+  const loX=(1+s)/(2*s)-xMax, hiX=(s-1)/(2*s)-xMin;
+  const loY=(1+s)/(2*s)-yMax, hiY=(s-1)/(2*s)-yMin;
+  cx=loX>hiX?(loX+hiX)/2:clamp(cx,loX,hiX);
+  cy=loY>hiY?(loY+hiY)/2:clamp(cy,loY,hiY);
+  return {s:s,x:cx*VW,y:cy*VH};
+}
+function pctile(arr,p){
+  if(!arr.length) return 0;
+  const a=arr.slice().sort((m,n)=>m-n);
+  return a[clamp(Math.floor(p*(a.length-1)),0,a.length-1)];
+}
+function focusSurvivors(){
+  const xs=[],ys=[];
+  for(let i=0;i<N;i++){const a=agents[i];if(a.tv===1){xs.push(a.x);ys.push(a.y);}}
+  if(!xs.length){viewAll();return;}
+  /* median centre and an inner box: a handful of stragglers shouldn't set the frame */
+  const mx=pctile(xs,0.5), my=pctile(ys,0.5);
+  const halfW=Math.max(pctile(xs.map(v=>Math.abs(v-mx)),0.82)+0.055,0.062);
+  const halfH=Math.max(pctile(ys.map(v=>Math.abs(v-my)),0.82)+0.045,0.055);
+  const s=clamp(Math.min(0.5/halfW,0.5/halfH),1.25,5.5);
+  const c=clampCam(s,(0.5-mx)*VW,(0.5-my)*VH);
+  state.camFocus=true;
+  document.getElementById("camAll").classList.remove("on");
+  document.getElementById("camFocus").classList.add("on");
+  setCam(c.s,c.x,c.y,1200);
+}
+
+/* ---------- reconnect ---------- */
+function reconnect(){
+  stopAuto();
+  if(state.filters.length===0) return;
+  viewAll();
+  momentEl.classList.remove("show");
+  document.body.classList.add("reconnecting");
+  const tick=()=>{
+    if(state.filters.length===0){
+      state.reconnect=null;
+      state.momentShown=false;
+      document.body.classList.remove("reconnecting");
+      showFinale();
+      return;
+    }
+    state.filters.pop();
+    recompute();
+    state.reconnect=setTimeout(tick,620);
+  };
+  state.reconnect=setTimeout(tick,260);
+}
+
+/* ---------- demo ---------- */
+const DEMO=[
+  {layer:"gender",value:"male",wait:1900},
+  {layer:"ethnicity",value:"european",wait:1900},
+  {layer:"income",value:"upperMid",wait:2100},
+  {layer:"nation",value:"usa",wait:2200},
+  {layer:"region",value:"usa|Washington",wait:2300},
+  {layer:"social",value:"close",wait:2700}
+];
+function runDemo(){
+  stopAuto();
+  const th=document.getElementById("thesis");if(th){th.classList.add("hide");setTimeout(()=>th.style.display="none",720);}
+  resetAll();
+  let i=0;
+  const step=()=>{
+    if(i>=DEMO.length){ state.demo=setTimeout(demoFinale,1300); return; }
+    const d=DEMO[i++];
+    applyFilter(d.layer,d.value);
+    state.demo=setTimeout(step,d.wait);
+  };
+  state.demo=setTimeout(step,1000);
+}
+function demoFinale(){
+  momentEl.classList.remove("show");
+  focusSurvivors();
+  state.demo=setTimeout(()=>{
+    viewAll();                                   /* the camera pulls back off the survivors */
+    document.getElementById("mNum").textContent=commas(state.pop);
+    document.getElementById("mLab").textContent="YOUR LIVED HUMAN WORLD";
+    document.getElementById("mPct").textContent=pctStr(state.pop/WORLD_POP)+" of humanity";
+    momentEl.querySelector(".m-say").innerHTML=
+      "This is the tiny world that feels like reality.<span>The other "+commas(WORLD_POP-state.pop)+" are still standing behind it.</span>";
+    state.demo=setTimeout(()=>{
+      momentEl.classList.add("show");
+      state.demo=setTimeout(()=>{momentEl.classList.remove("show");state.demo=null;},9000);
+    },900);
+  },3600);
+}
+function stopAuto(){
+  if(state.demo){clearTimeout(state.demo);state.demo=null;}
+  if(state.reconnect){clearTimeout(state.reconnect);state.reconnect=null;}
+}
+
+/* ============================================================
+   9. WIRING
+   ============================================================ */
+document.getElementById("btnDemo").addEventListener("click",runDemo);
+document.getElementById("btnUndo").addEventListener("click",()=>{stopAuto();state.filters.pop();recompute();});
+document.getElementById("btnReset").addEventListener("click",()=>{stopAuto();resetAll();});
+document.getElementById("btnReconnect").addEventListener("click",reconnect);
+document.getElementById("camAll").addEventListener("click",()=>{stopAuto();viewAll();});
+document.getElementById("camFocus").addEventListener("click",()=>{stopAuto();focusSurvivors();});
+document.getElementById("tgRemain").addEventListener("click",()=>{
+  state.mode="remaining";
+  document.getElementById("tgRemain").classList.add("on");
+  document.getElementById("tgExcl").classList.remove("on");
+  paintCounter();paintStats();
+});
+document.getElementById("tgExcl").addEventListener("click",()=>{
+  state.mode="excluded";
+  document.getElementById("tgExcl").classList.add("on");
+  document.getElementById("tgRemain").classList.remove("on");
+  paintCounter();paintStats();
+});
+document.getElementById("methodBtn").addEventListener("click",()=>{
+  document.getElementById("method").classList.toggle("open");
+});
+document.getElementById("sheetClose").addEventListener("click",()=>{
+  document.getElementById("railL").classList.remove("open");
+});
+document.getElementById("count").addEventListener("click",()=>{
+  document.getElementById("method").classList.toggle("open");
+});
+document.getElementById("beginDivide").addEventListener("click",()=>{
+  document.getElementById("thesis").classList.add("hide");
+  setTimeout(()=>{document.getElementById("thesis").style.display="none";},720);
+  state.openLayer="gender";paintLayers();
+});
+setTimeout(()=>{
+  const t=document.getElementById("thesis");
+  if(t&&t.style.display!=="none") t.classList.add("soft");
+},6000);
+
+/* ---------- boot ---------- */
+resize();
+recompute({instant:true});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
